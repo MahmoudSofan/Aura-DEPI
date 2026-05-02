@@ -63,7 +63,7 @@ Poll for status and (when complete) the full campaign artifact.
   "status": "completed",
   "campaign": {
     "request": { "brief": "...", "platform": "instagram", "brand_id": "...", "target_audience": "..." },
-    "copy": {
+    "ad_copy": {
       "headline": "Run the city.",
       "primary_text": "Built for the streets you actually run.",
       "cta": "Shop now",

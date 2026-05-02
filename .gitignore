@@ -1,0 +1,60 @@
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# --- Virtualenvs ---
+.venv/
+venv/
+env/
+
+# --- Tooling caches ---
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# --- ML / experiment tracking ---
+mlruns/
+mlartifacts/
+
+# --- Runtime data (uploads, local DBs) ---
+backend/uploads/
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Node (frontend, when wired) ---
+node_modules/
+.next/
+.nuxt/
+.svelte-kit/
+.parcel-cache/
+.turbo/
+*.tsbuildinfo
+
+# --- IDE / editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini

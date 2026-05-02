@@ -67,7 +67,7 @@ class Campaign(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request: CampaignRequest
-    copy: AdCopy
+    ad_copy: AdCopy
     image: GeneratedImage
     score: CriticScore
     run_id: str = Field(min_length=1)

@@ -7,6 +7,10 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
     depends_on:
       - chromadb
       - mlflow
