@@ -20,9 +20,13 @@ services:
       context: ./frontend
     container_name: aura-frontend
     ports:
-      - "3000:3000"
+      - "8501:8501"
     volumes:
       - ./frontend:/app
+    environment:
+      AURA_API_BASE: http://api:8000
+    depends_on:
+      - api
 
   chromadb:
     image: chromadb/chroma:latest
