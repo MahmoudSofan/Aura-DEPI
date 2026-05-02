@@ -1,0 +1,47 @@
+services:
+  api:
+    build:
+      context: ./backend
+    container_name: aura-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - chromadb
+      - mlflow
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: aura-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: aura-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: aura-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+
+volumes:
+  chromadb_data:
+  mlflow_data:
