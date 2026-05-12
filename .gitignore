@@ -33,6 +33,11 @@ mlruns/
 mlartifacts/
 
 # --- Runtime data (uploads, local DBs) ---
+backend/data/aura.db*
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend/data/artifacts/*
+!backend/data/artifacts/.gitkeep
 backend/uploads/
 *.sqlite
 *.sqlite3
