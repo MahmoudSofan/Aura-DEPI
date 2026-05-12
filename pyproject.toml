@@ -17,6 +17,21 @@ dependencies = [
     "pydantic>=2.6",
     "python-multipart>=0.0.9",
     "mlflow>=3.0",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.2",
+    "chromadb>=0.5",
+    "sentence-transformers>=3.0",
+    "openai>=1.40",
+    "tavily-python>=0.5",
+    "pdfplumber>=0.11",
+    "python-docx>=1.1",
+    "tiktoken>=0.7",
+    "python-ulid>=2.7",
+    "chardet>=5.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +65,7 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (formatter handles it)
+    "B008",  # function call in argument default — FastAPI's `Depends`/`Query` idiom
 ]
 
 [tool.ruff.format]
@@ -67,10 +83,45 @@ disallow_incomplete_defs = true
 check_untyped_defs = true
 no_implicit_optional = true
 files = ["backend", "agents", "rag", "eval"]
+mypy_path = "."
+explicit_package_bases = true
+namespace_packages = true
 
 [[tool.mypy.overrides]]
-module = ["tests.*"]
+module = [
+    "backend.tests.*",
+    "agents.tests.*",
+    "rag.tests.*",
+    "eval.tests.*",
+    "eval.benchmarks.*",
+]
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "tavily.*",
+    "PIL",
+    "PIL.*",
+    "chromadb",
+    "chromadb.*",
+    "huggingface_hub",
+    "huggingface_hub.*",
+    "tiktoken",
+    "tiktoken.*",
+    "ulid",
+    "ulid.*",
+    "sentence_transformers",
+    "sentence_transformers.*",
+    "langgraph.*",
+    "mlflow",
+    "mlflow.*",
+    "chardet",
+    "chardet.*",
+    "docx",
+    "pdfplumber",
+    "pdfplumber.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -78,8 +129,14 @@ testpaths = ["backend", "agents", "rag", "eval"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# importlib mode lets backend.tests and agents.tests coexist without the
+# leaf-name collision that the legacy "prepend" import mode would hit.
 addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "--import-mode=importlib",
+]
+markers = [
+    "live: gated against real OpenRouter / Tavily / HF — opt in with AURA_RUN_LIVE_TESTS=1",
 ]

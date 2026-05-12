@@ -1,117 +1,50 @@
 # Aura API Contract
 
-FastAPI service exposing campaign generation. Base URL: `/api/v1`.
+The authoritative API contract lives in
+[`specs/001-aura-marketing-platform/contracts/openapi.yaml`](../specs/001-aura-marketing-platform/contracts/openapi.yaml).
 
-All request/response bodies are JSON. Schemas mirror [`agents/schemas.py`](../agents/schemas.py).
+Open that file in any OpenAPI viewer (Swagger UI, Redoc, the FastAPI
+`/docs` endpoint when running `uvicorn backend.main:app`) for the full
+list of routes, schemas, and response shapes.
 
----
+This page used to contain a hand-maintained mirror of the contract; that
+mirror diverged from the live API and has been removed in favour of the
+single OpenAPI source of truth (resolves the divergence flagged in
+[CLAUDE.md](../CLAUDE.md)).
 
-## 1. `POST /campaigns`
+## At a glance
 
-Submit a new campaign generation job. Returns immediately with a `run_id`; generation runs asynchronously.
+Base URL: `/api/v1`
 
-**Request body** — `CampaignRequest`:
+| Resource    | Verb + path                                 | Purpose                                           |
+| ----------- | ------------------------------------------- | ------------------------------------------------- |
+| Health      | `GET  /healthz`                             | Liveness + dependency status (200 / 503).         |
+| Brands      | `POST /brands`                              | Mint a brand (system-assigned ULID id).           |
+|             | `GET  /brands`                              | List brands, newest first.                        |
+|             | `GET  /brands/{brand_id}`                   | Fetch one brand.                                  |
+|             | `DELETE /brands/{brand_id}`                 | Cascade-delete brand + docs + runs + artifacts.   |
+| Documents   | `POST /brands/{brand_id}/documents`         | Upload a doc (multipart `file=`); ingests to RAG. |
+|             | `GET  /brands/{brand_id}/documents`         | List docs for the brand, newest first.            |
+| Campaigns   | `POST /campaigns`                           | Submit a brief; returns 202 + `run_id`.           |
+|             | `GET  /campaigns`                           | List runs (filter by `brand_id`/`status`).        |
+|             | `GET  /campaigns/{run_id}`                  | Poll a run; full output once `status='done'`.     |
+| Artifacts   | `GET  /artifacts/{brand_id}/{filename}`     | Stream the generated PNG (200, `image/png`).      |
 
-```json
-{
-  "brief": "Launch summer sneaker line targeting Gen Z runners",
-  "platform": "instagram",
-  "brand_id": "brand_acme_001",
-  "target_audience": "18-24, urban, fitness-curious"
-}
-```
+## Legacy redirects
 
-| Field             | Type                                                                                | Required | Notes                |
-| ----------------- | ----------------------------------------------------------------------------------- | -------- | -------------------- |
-| `brief`           | string                                                                              | yes      | non-empty            |
-| `platform`        | enum: `facebook` \| `instagram` \| `tiktok` \| `twitter` \| `linkedin` \| `youtube` | yes      |                      |
-| `brand_id`        | string                                                                              | yes      | resolves brand voice |
-| `target_audience` | string                                                                              | yes      | non-empty            |
-
-**Response `202 Accepted`**:
-
-```json
-{
-  "run_id": "9f3c1a2e-...",
-  "status": "pending"
-}
-```
-
-**Errors**: `400` invalid body, `404` unknown `brand_id`, `422` schema validation.
-
----
-
-## 2. `GET /campaigns/{run_id}`
-
-Poll for status and (when complete) the full campaign artifact.
-
-**Path params**: `run_id` — string returned by `POST /campaigns`.
-
-**Response `200 OK`** — discriminated by `status`:
-
-**Pending / running**:
-
-```json
-{ "run_id": "9f3c...", "status": "running" }
-```
-
-**Completed** — body is `Campaign`:
-
-```json
-{
-  "run_id": "9f3c...",
-  "status": "completed",
-  "campaign": {
-    "request": { "brief": "...", "platform": "instagram", "brand_id": "...", "target_audience": "..." },
-    "ad_copy": {
-      "headline": "Run the city.",
-      "primary_text": "Built for the streets you actually run.",
-      "cta": "Shop now",
-      "platform": "instagram"
-    },
-    "image": {
-      "path": "s3://aura/runs/9f3c.../hero.png",
-      "prompt": "...",
-      "negative_prompt": "...",
-      "dimensions": [1080, 1080]
-    },
-    "score": {
-      "overall": 0.84,
-      "breakdown": { "relevance": 0.9, "brand_fit": 0.8, "clarity": 0.82 },
-      "feedback": "Strong CTA, slightly generic visual.",
-      "passed": true
-    }
-  }
-}
-```
-
-**Failed**:
-
-```json
-{ "run_id": "9f3c...", "status": "failed", "error": "research_agent: tavily timeout" }
-```
-
-**Errors**: `404` unknown `run_id`.
-
----
-
-## 3. `GET /healthz`
-
-Liveness probe. No auth.
-
-**Response `200 OK`**:
-
-```json
-{ "status": "ok" }
-```
-
-Returns `503` if downstream dependencies (ChromaDB, MLflow) are unreachable.
-
----
+The original unversioned routes (`/api/campaigns/generate`,
+`/api/campaigns/{run_id}/status`, `/api/documents/upload`) emit `308 →
+/api/v1/...` redirects (or `410 Gone` for the documents upload, which
+moved under `/brands/{brand_id}`). See
+[`backend/main.py`](../backend/main.py) for the exact wiring.
 
 ## Conventions
 
-- **Status enum**: `pending` → `running` → `completed` | `failed`.
-- **IDs**: `run_id` is a UUIDv4 string.
-- **Errors**: standard FastAPI shape — `{ "detail": "..." }`.
-- **Auth**: TBD (likely bearer token in `Authorization` header).
+- **Auth** — operator API token via `Authorization: Bearer ...` when
+  `AURA_API_TOKEN` is set; no auth when blank (single-trusted-operator
+  default).
+- **IDs** — brands and runs use ULIDs (string).
+- **Errors** — standard FastAPI shape `{ "detail": "..." }`. Contract
+  responses for 404 / 409 / 413 / 415 / 422 / 503 documented in the
+  OpenAPI file.
+- **Status enum (runs)** — `queued` → `running` → `done | failed`.

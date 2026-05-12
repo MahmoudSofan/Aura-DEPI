@@ -1,16 +1,28 @@
 services:
   api:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: aura-api
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - aura_data:/app/backend/data
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       CHROMA_HOST: chromadb
       CHROMA_PORT: "8000"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      AURA_API_TOKEN: ${AURA_API_TOKEN:-}
+      AURA_LLM_MODEL: ${AURA_LLM_MODEL:-openai/gpt-4o-mini}
+      AURA_IMAGE_MODEL: ${AURA_IMAGE_MODEL:-google/gemini-2.5-flash-image-preview}
+      AURA_CRITIC_THRESHOLD: ${AURA_CRITIC_THRESHOLD:-0.7}
+      AURA_RETRY_CAP: ${AURA_RETRY_CAP:-2}
+      AURA_CONCURRENCY_CAP: ${AURA_CONCURRENCY_CAP:-5}
+      AURA_RUN_RETENTION_PER_BRAND: ${AURA_RUN_RETENTION_PER_BRAND:-100}
+      AURA_DATA_DIR: /app/backend/data
     depends_on:
       - chromadb
       - mlflow
@@ -51,5 +63,6 @@ services:
       --default-artifact-root /mlflow/artifacts
 
 volumes:
+  aura_data:
   chromadb_data:
   mlflow_data:

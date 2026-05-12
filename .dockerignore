@@ -1,0 +1,66 @@
+# --- VCS / metadata ---
+.git/
+.gitignore
+.dockerignore
+
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# --- Virtualenvs ---
+.venv/
+venv/
+env/
+
+# --- Tooling caches ---
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# --- Runtime data (do not bake into the image) ---
+backend/data/
+backend/uploads/
+*.sqlite
+*.sqlite3
+*.db
+
+# --- ML / experiment tracking ---
+mlruns/
+mlartifacts/
+
+# --- Frontend (separate image) ---
+frontend/
+node_modules/
+
+# --- Spec / docs (not needed at runtime) ---
+specs/
+docs/
+.specify/
+.claude/
+*.md
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

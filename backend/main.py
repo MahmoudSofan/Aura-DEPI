@@ -1,15 +1,26 @@
 from __future__ import annotations
 
-import logging
-import uuid
-from pathlib import Path
-from typing import Any
+# Load .env before any other imports so module-level code in transitively
+# imported modules (e.g. SQLAlchemy engine in backend/persistence/session.py)
+# sees the configured env vars.
+from dotenv import load_dotenv
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+load_dotenv()
 
-from agents.schemas import CampaignRequest
+import logging  # noqa: E402
+from collections.abc import AsyncIterator  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
+
+from backend.api.artifacts import router as artifacts_router  # noqa: E402
+from backend.api.brands import router as brands_router  # noqa: E402
+from backend.api.campaigns import router as campaigns_router  # noqa: E402
+from backend.api.documents import router as documents_router  # noqa: E402
+from backend.api.healthz import router as healthz_router  # noqa: E402
+from backend.orchestrator.interrupt_sweeper import run_interrupt_sweep  # noqa: E402
+from backend.orchestrator.runner import CampaignRunner  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.responses import JSONResponse, RedirectResponse  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,31 +28,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger("aura.api")
 
-app = FastAPI(title="Aura API", version="0.1.0")
 
-UPLOAD_DIR = Path(__file__).parent / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # FR-025: fail any non-terminal run left over from a prior process.
+    run_interrupt_sweep()
 
-RUNS: dict[str, dict[str, Any]] = {}
+    # Construct + start the campaign runner.
+    runner = CampaignRunner()
+    app.state.campaign_runner = runner
+    await runner.start()
+
+    try:
+        yield
+    finally:
+        await runner.stop()
 
 
-def _ingest_document(doc_id: str, path: Path) -> None:
-    # TODO: replace with Yousef's RAG ingest module once available.
-    logger.info("[stub] ingesting doc_id=%s path=%s", doc_id, path)
+app = FastAPI(title="Aura API", version="1.0.0", lifespan=_lifespan)
 
 
-async def _run_campaign(run_id: str, request: CampaignRequest) -> None:
-    RUNS[run_id]["status"] = "running"
-    logger.info("[stub] campaign run %s started; LangGraph pipeline not yet wired", run_id)
-    # TODO: invoke agents.graph.run(request) once the LangGraph is implemented;
-    # update RUNS[run_id] with progress / result / errors as it executes.
+# ---------------------------------------------------------------------------
+# Exception handlers.
+# ---------------------------------------------------------------------------
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    logger.warning(
-        "%s %s -> %d %s", request.method, request.url.path, exc.status_code, exc.detail
-    )
+    logger.warning("%s %s -> %d %s", request.method, request.url.path, exc.status_code, exc.detail)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
@@ -67,41 +81,45 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-@app.post("/api/documents/upload")
-async def upload_document(file: UploadFile = File(...)) -> dict[str, str]:
-    doc_id = str(uuid.uuid4())
-    suffix = Path(file.filename or "").suffix
-    saved_path = UPLOAD_DIR / f"{doc_id}{suffix}"
-    contents = await file.read()
-    saved_path.write_bytes(contents)
-    logger.info(
-        "saved upload filename=%s -> %s (%d bytes)", file.filename, saved_path, len(contents)
+# ---------------------------------------------------------------------------
+# Versioned routers.
+# ---------------------------------------------------------------------------
+
+app.include_router(healthz_router, prefix="/api/v1")
+app.include_router(brands_router, prefix="/api/v1")
+app.include_router(documents_router, prefix="/api/v1")
+app.include_router(campaigns_router, prefix="/api/v1")
+app.include_router(artifacts_router, prefix="/api/v1")
+
+
+# ---------------------------------------------------------------------------
+# Legacy unversioned routes — redirect / 410 per `research.md §13`.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/campaigns/generate", include_in_schema=False)
+async def _legacy_campaigns_generate() -> RedirectResponse:
+    logger.info("legacy POST /api/campaigns/generate -> 308 /api/v1/campaigns")
+    return RedirectResponse(url="/api/v1/campaigns", status_code=308)
+
+
+@app.get("/api/campaigns/{run_id}/status", include_in_schema=False)
+async def _legacy_campaigns_status(run_id: str) -> RedirectResponse:
+    logger.info("legacy GET /api/campaigns/%s/status -> 308 /api/v1/campaigns/%s", run_id, run_id)
+    return RedirectResponse(url=f"/api/v1/campaigns/{run_id}", status_code=308)
+
+
+@app.post("/api/documents/upload", include_in_schema=False)
+async def _legacy_documents_upload() -> JSONResponse:
+    logger.info("legacy POST /api/documents/upload -> 410 Gone")
+    return JSONResponse(
+        status_code=410,
+        content={
+            "detail": (
+                "POST /api/documents/upload has been removed. Documents are now "
+                "scoped to a brand — use POST /api/v1/brands/{brand_id}/documents "
+                "instead."
+            ),
+            "code": "legacy_route_gone",
+        },
     )
-    _ingest_document(doc_id, saved_path)
-    return {"doc_id": doc_id}
-
-
-@app.post("/api/campaigns/generate", status_code=202)
-async def generate_campaign(
-    request: CampaignRequest, background_tasks: BackgroundTasks
-) -> dict[str, str]:
-    run_id = str(uuid.uuid4())
-    RUNS[run_id] = {"status": "pending", "progress": 0.0, "result": None}
-    background_tasks.add_task(_run_campaign, run_id, request)
-    logger.info("accepted campaign request brand_id=%s run_id=%s", request.brand_id, run_id)
-    return {"run_id": run_id}
-
-
-@app.get("/api/campaigns/{run_id}/status")
-async def get_campaign_status(run_id: str) -> dict[str, Any]:
-    state = RUNS.get(run_id)
-    if state is None:
-        raise HTTPException(status_code=404, detail=f"run_id {run_id!r} not found")
-    response: dict[str, Any] = {
-        "run_id": run_id,
-        "status": state["status"],
-        "progress": state["progress"],
-    }
-    if state.get("result") is not None:
-        response["result"] = state["result"]
-    return response
